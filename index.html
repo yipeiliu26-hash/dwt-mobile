@@ -1,0 +1,1602 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>不良品倉追蹤</title>
+<meta name="theme-color" content="#1c5dc2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="不良品倉">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<style>
+/* 版面:單欄手機 App;下方分頁列切換「項目明細(主畫面)/品質異常」,上方固定工具列 */
+:root {
+  --bg: #f1f3f6;
+  --surface: #ffffff;
+  --line: #e1e5eb;
+  --fg: #1b2029;
+  --muted: #687180;
+  --accent: #1c5dc2;
+  --accent-soft: #e2ebf9;
+  --bad: #b93a27;
+  --bad-soft: #fbe5e0;
+  --warn: #8f5d00;
+  --warn-soft: #faefd2;
+  --done-soft: #eceef2;
+  --font: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1115; --surface: #181c22; --line: #2a3039; --fg: #e7eaee; --muted: #9aa3af;
+    --accent: #78a9f4; --accent-soft: #1d2b42; --bad: #f08c76; --bad-soft: #3a211c;
+    --warn: #e2b55c; --warn-soft: #352a13; --done-soft: #232831; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1115; --surface: #181c22; --line: #2a3039; --fg: #e7eaee; --muted: #9aa3af;
+  --accent: #78a9f4; --accent-soft: #1d2b42; --bad: #f08c76; --bad-soft: #3a211c;
+  --warn: #e2b55c; --warn-soft: #352a13; --done-soft: #232831; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; -webkit-text-size-adjust: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { max-width: 34rem; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 6rem; }
+
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border-top: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.tabbar button { background: none; border: none; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.45rem 0 0.4rem; font-size: 0.75rem; cursor: pointer; min-height: 3.25rem; }
+.tabbar button svg { width: 1.45rem; height: 1.45rem; }
+.tabbar button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 0.6rem; }
+.total { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.7rem 0.85rem; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.total-label { font-size: 0.8rem; color: var(--muted); }
+.total-value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.num { font-variant-numeric: tabular-nums; }
+.card-line.muted { color: var(--muted); opacity: 1; }
+.card.gone { background: transparent; }
+.card.gone .card-title, .card.gone .card-line { color: var(--muted); }
+
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  display: grid; grid-template-columns: 4.5rem 1fr 4.5rem; align-items: center; min-height: 3.25rem;
+}
+.bar h1 { grid-column: 2; margin: 0; font-size: 1.05rem; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar.home { grid-template-columns: 1fr auto; }
+.bar.home h1 { grid-column: 1; text-align: left; font-size: 1.35rem; }
+.bar .l { justify-self: start; } .bar .r { justify-self: end; }
+.icon-btn, .text-btn { background: none; border: none; padding: 0.5rem 0.25rem; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 0.2rem; min-height: 2.75rem; }
+.text-btn.strong { font-weight: 600; }
+.icon-btn svg { width: 1.5rem; height: 1.5rem; }
+.icon-btn:disabled, .text-btn:disabled { opacity: 0.4; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+.stack { display: flex; flex-direction: column; gap: 0.75rem; }
+.search { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.8rem 0.65rem 2.2rem; font-size: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 0.7rem center; background-size: 1rem; }
+.chips { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.9rem; min-height: 2.25rem; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: transparent; color: var(--accent); font-weight: 600; }
+
+.sync { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem 0.85rem; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.85rem; }
+.sync-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.sync-row span { color: var(--muted); min-width: 0; }
+.sync-row strong { color: var(--fg); font-weight: 600; }
+.pill-btn { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 999px; padding: 0.35rem 0.85rem; cursor: pointer; font-size: 0.85rem; white-space: nowrap; min-height: 2.25rem; }
+.pill-btn.fill { background: var(--accent); color: var(--surface); }
+.pill-btn:disabled { opacity: 0.45; }
+.banner { border-radius: var(--radius); padding: 0.75rem 0.85rem; font-size: 0.85rem; line-height: 1.55; background: var(--warn-soft); color: var(--fg); display: flex; flex-direction: column; gap: 0.5rem; }
+.banner.info { background: var(--accent-soft); }
+
+.card { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: flex; flex-direction: column; gap: 0.3rem; cursor: pointer; }
+.card.bad { border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.card-title { font-size: 1.02rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.card-line { font-size: 0.88rem; color: var(--fg); opacity: 0.8; overflow-wrap: anywhere; }
+.badge { flex: none; font-size: 0.8rem; border-radius: 8px; padding: 0.15rem 0.55rem; white-space: nowrap; }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.info { background: var(--accent-soft); color: var(--accent); }
+.badge.done { background: var(--done-soft); color: var(--muted); }
+.badge.pending { background: none; border: 1px dashed var(--muted); color: var(--muted); }
+.badge.origin { background: none; border: 1px solid var(--line); color: var(--fg); max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.badge.origin.none { border-style: dashed; color: var(--muted); }
+.card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; }
+.chips.scroll { flex-wrap: nowrap; overflow-x: auto; margin: -0.15rem calc(-1 * max(16px, env(safe-area-inset-right, 0px))) 0 0; padding: 0.15rem max(16px, env(safe-area-inset-right, 0px)) 0.15rem 0; scrollbar-width: none; }
+.chips.scroll::-webkit-scrollbar { display: none; }
+.chip.small { font-size: 0.82rem; padding: 0.3rem 0.65rem; min-height: 2rem; white-space: nowrap; flex: none; }
+.origin-other { margin-top: 0.5rem; }
+.f-error { color: var(--bad); font-size: 0.82rem; margin: 0.35rem 0 0; }
+.f-error:empty { display: none; }
+.kv dd.muted { color: var(--muted); font-weight: 400; }
+.empty { text-align: center; color: var(--muted); padding: 2rem 1rem; font-size: 0.9rem; line-height: 1.6; }
+
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.55rem 1rem; font-size: 0.95rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 0.75rem; }
+.sec-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+.timeline li { border-left: 2px solid var(--accent-soft); padding-left: 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.log-meta { font-size: 0.85rem; color: var(--muted); display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.log-note { margin: 0; font-weight: 600; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thumbs { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+.thumb { width: 3.6rem; height: 3.6rem; border-radius: 10px; background: var(--done-soft); border: none; padding: 0; overflow: hidden; cursor: zoom-in; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb.ph { display: grid; place-items: center; color: var(--muted); font-size: 0.7rem; cursor: default; }
+
+.form { display: flex; flex-direction: column; gap: 1rem; }
+.f-label { font-size: 0.9rem; color: var(--fg); margin: 0 0 0.4rem; display: block; }
+.f-input { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem 0.8rem; font-size: 16px; min-height: 2.9rem; }
+textarea.f-input { min-height: 6rem; resize: vertical; line-height: 1.5; }
+.f-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.f-grid > * { min-width: 0; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.photo-cell { position: relative; aspect-ratio: 1; max-width: 100%; border-radius: 12px; overflow: hidden; background: var(--done-soft); }
+.photo-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-cell .rm { position: absolute; top: 0.3rem; right: 0.3rem; width: 1.8rem; height: 1.8rem; border-radius: 50%; border: none; background: rgba(0,0,0,0.55); color: #fff; cursor: pointer; font-size: 1rem; line-height: 1; }
+.photo-add { aspect-ratio: 1; max-width: 100%; border-radius: 12px; border: 1.5px dashed var(--line); display: grid; place-items: center; color: var(--accent); cursor: pointer; position: relative; background: var(--surface); }
+.photo-add svg { width: 1.7rem; height: 1.7rem; }
+.photo-add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.hint { font-size: 0.8rem; color: var(--muted); margin: 0; line-height: 1.5; }
+.danger-btn { background: none; border: 1px solid var(--line); color: var(--bad); border-radius: 12px; padding: 0.7rem; cursor: pointer; }
+
+.toast { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); z-index: 20;
+  max-width: 32rem; margin: 0 auto; background: var(--fg); color: var(--bg); border-radius: 12px; padding: 0.75rem 0.9rem; font-size: 0.88rem; line-height: 1.5; box-shadow: 0 6px 24px rgba(0,0,0,0.18); }
+.lightbox { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.88); display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+.confirm { position: fixed; inset: 0; z-index: 25; background: rgba(0,0,0,0.4); display: flex; align-items: flex-end; justify-content: center; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.confirm .sheet { width: 100%; max-width: 32rem; }
+.confirm .row { display: flex; gap: 0.6rem; justify-content: flex-end; }
+@media (prefers-reduced-motion: no-preference) { .card, .chip, .pill-btn { transition: border-color 120ms, background-color 120ms; } }
+</style>
+
+<div class="app" id="app"></div>
+<nav class="tabbar" id="tabbar" aria-label="分頁">
+  <button type="button" data-tab="items" aria-current="page">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+    <span>項目明細</span>
+  </button>
+  <button type="button" data-tab="quality" aria-current="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17.5v.01"/></svg>
+    <span>品質異常</span>
+  </button>
+</nav>
+<input type="file" id="snap-input" accept=".json,application/json" hidden>
+
+<script>
+/*
+ * quality-core.js — 品質異常紀錄的純邏輯(無 DOM)
+ *
+ * 桌面版(js/quality-app.js)和手機版(mobile/quality-mobile.src.html,建置時內嵌)共用這一份。
+ * Node 可直接 require(tests/quality.test.js)。
+ *
+ * 資料模型
+ *   issue(一筆異常):{ id, supplier, item, part_no, defect, defect_qty, total_qty, scar, due,
+ *                      status, containment, created_at, updated_at, field_times{欄位: ISO}, deleted }
+ *   log(現場紀錄):  { id, issue_id, date, type, note, photos[檔名], status_to, source,
+ *                      created_at, updated_at, deleted }
+ *
+ * 同步方式(公司 OneDrive,不需要伺服器):
+ *   手機 → 電腦:手機產生「傳送包」(makePackage)存到 OneDrive 品質異常/收件匣/,桌面版 applyPackage 合併。
+ *   電腦 → 手機:桌面版寫 品質異常/手機清單.json(makeSnapshot),手機載入後 rebasePending 去掉已確認的變更。
+ *
+ * 合併規則:異常是「逐欄位」比較 field_times,較新的勝出(手機改狀態、電腦改對策不會互相蓋掉);
+ *           紀錄以 updated_at 較新者為準;刪除是軟刪除(deleted: true),合併時不會被舊資料加回。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.DWTQualityCore = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // v2(2026-10-22):issue 加 origin(異常來源)、origin_other(選「其他」時自填,最多 40 字)。
+  //   v1 資料讀進來時補空值(顯示「未指定」);舊資料沒有這兩欄的 field_times,合併時不會蓋掉新資料(見 fieldTime)。
+  //   注意:log 的 source(phone/desktop)是另一回事,不要混用。
+  var SCHEMA_VERSION = 2;
+  var STATUSES = ['調查中', '待回覆', '結案'];
+  var SCAR_STATES = ['未開', '已開', '已回覆', '已結案'];
+  var LOG_TYPES = ['現場觀察', '量測', '會議'];
+  var ORIGINS = ['IQC', 'IPQC', '產線', '客戶', '出貨檢驗', '其他'];
+  var ORIGIN_OTHER = '其他';
+  var ORIGIN_OTHER_MAX = 40;
+  var ORIGIN_NONE = '__none__';   // 篩選用:未指定
+  var ISSUE_FIELDS = ['supplier', 'item', 'part_no', 'defect', 'defect_qty', 'total_qty', 'scar', 'due', 'status', 'containment', 'origin', 'origin_other', 'deleted'];
+  var LOG_FIELDS = ['issue_id', 'date', 'type', 'note', 'photos', 'status_to', 'source', 'created_at', 'deleted'];
+  var ID_RE = /^[A-Za-z0-9_-]{4,64}$/;
+  var PHOTO_RE = /^[A-Za-z0-9_-]{1,80}\.jpg$/;
+
+  // ---------- 小工具 ----------
+  function nowIso() { return new Date().toISOString(); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  /** 本地日期 YYYY-MM-DD */
+  function localDate(d) { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function shortDate(s) { var m = /^\d{4}-(\d{2})-(\d{2})$/.exec(s || ''); return m ? (+m[1]) + '/' + (+m[2]) : (s || ''); }
+  function newId(prefix) {
+    var rnd = '';
+    for (var i = 0; i < 6; i++) rnd += Math.floor(Math.random() * 36).toString(36);
+    return (prefix || 'X') + Date.now().toString(36) + rnd;
+  }
+  function str(v, max) { return v == null ? '' : String(v).slice(0, max || 2000); }
+  function numOrEmpty(v) {
+    if (v === '' || v == null) return '';
+    var n = Number(v);
+    return isFinite(n) && n >= 0 ? n : '';
+  }
+  function dateOrEmpty(v) { return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  function emptyState() {
+    return { schema_version: SCHEMA_VERSION, updated_at: '', issues: {}, logs: {}, processed_packages: {} };
+  }
+  function normalizeState(s) {
+    var out = emptyState();
+    if (!s || typeof s !== 'object') return out;
+    out.updated_at = str(s.updated_at, 40);
+    Object.keys(s.issues || {}).forEach(function (id) { var it = cleanIssue(s.issues[id]); if (it) out.issues[it.id] = it; });
+    Object.keys(s.logs || {}).forEach(function (id) { var lg = cleanLog(s.logs[id]); if (lg) out.logs[lg.id] = lg; });
+    Object.keys(s.processed_packages || {}).forEach(function (id) { out.processed_packages[id] = s.processed_packages[id]; });
+    return out;
+  }
+
+  // ---------- 清理外來資料(手機傳送包、檔案)----------
+  function cleanIssue(x) {
+    if (!x || !ID_RE.test(x.id || '')) return null;
+    var ft = {};
+    Object.keys(x.field_times || {}).forEach(function (k) { if (ISSUE_FIELDS.indexOf(k) >= 0) ft[k] = str(x.field_times[k], 40); });
+    var origin = ORIGINS.indexOf(x.origin) >= 0 ? x.origin : '';
+    return {
+      id: x.id,
+      supplier: str(x.supplier, 100),
+      item: str(x.item, 100),
+      part_no: str(x.part_no, 60),
+      defect: str(x.defect, 300),
+      defect_qty: numOrEmpty(x.defect_qty),
+      total_qty: numOrEmpty(x.total_qty),
+      scar: SCAR_STATES.indexOf(x.scar) >= 0 ? x.scar : '未開',
+      due: dateOrEmpty(x.due),
+      status: STATUSES.indexOf(x.status) >= 0 ? x.status : '調查中',
+      containment: str(x.containment, 300),
+      origin: origin,
+      // 只有來源是「其他」時才保留自填文字
+      origin_other: origin === ORIGIN_OTHER ? str(x.origin_other, ORIGIN_OTHER_MAX).trim() : '',
+      created_at: str(x.created_at, 40),
+      updated_at: str(x.updated_at, 40),
+      field_times: ft,
+      deleted: !!x.deleted
+    };
+  }
+  function cleanLog(x) {
+    if (!x || !ID_RE.test(x.id || '') || !ID_RE.test(x.issue_id || '')) return null;
+    return {
+      id: x.id,
+      issue_id: x.issue_id,
+      date: dateOrEmpty(x.date),
+      type: LOG_TYPES.indexOf(x.type) >= 0 ? x.type : '現場觀察',
+      note: str(x.note, 4000),
+      photos: (Array.isArray(x.photos) ? x.photos : []).filter(function (p) { return PHOTO_RE.test(p); }).slice(0, 20),
+      status_to: STATUSES.indexOf(x.status_to) >= 0 ? x.status_to : '',
+      source: x.source === 'phone' ? 'phone' : 'desktop',
+      created_at: str(x.created_at, 40),
+      updated_at: str(x.updated_at, 40),
+      deleted: !!x.deleted
+    };
+  }
+
+  // ---------- 建立 / 修改 ----------
+  function newIssue(fields, at) {
+    at = at || nowIso();
+    var it = cleanIssue(Object.assign({ id: newId('Q'), created_at: at, updated_at: at }, fields || {}));
+    ISSUE_FIELDS.forEach(function (f) { it.field_times[f] = at; });
+    return it;
+  }
+  /** 改一個欄位(會記錄該欄位的修改時間)。回傳新物件,不改原本的。 */
+  function setIssueField(issue, field, value, at) {
+    var ch = {}; ch[field] = value;
+    return setIssueFields(issue, ch, at);
+  }
+  /**
+   * 一次改多個欄位(同一個修改時間)。改來源時一定要和 origin_other 一起改,
+   * 例如 { origin: 'IQC', origin_other: '' } 或 { origin: '其他', origin_other: '供應商自檢' }。
+   */
+  function setIssueFields(issue, changes, at) {
+    at = at || nowIso();
+    var raw = clone(issue);
+    Object.keys(changes).forEach(function (f) {
+      if (ISSUE_FIELDS.indexOf(f) < 0) throw new Error('未知欄位:' + f);
+      raw[f] = changes[f];
+    });
+    // 來源改成「其他」以外的選項 → 自填文字一併清空(也記錄時間,合併時才會一起生效)
+    if ('origin' in changes && changes.origin !== ORIGIN_OTHER) raw.origin_other = '';
+    var it = cleanIssue(raw);
+    Object.keys(changes).forEach(function (f) { it.field_times[f] = at; });
+    if ('origin' in changes) it.field_times.origin_other = at;
+    it.updated_at = at;
+    return it;
+  }
+
+  // ---------- 異常來源 ----------
+  /** 顯示文字:未指定 / IQC … / 其他:自填內容 */
+  function originLabel(issue) {
+    if (!issue || !issue.origin) return '未指定';
+    if (issue.origin === ORIGIN_OTHER) return issue.origin_other ? ORIGIN_OTHER + ':' + issue.origin_other : ORIGIN_OTHER;
+    return issue.origin;
+  }
+  /**
+   * 表單檢查。isNew = 新增異常(來源必填);編輯舊資料可以維持未指定。
+   * @returns {string} 錯誤訊息,沒問題回 ''
+   */
+  function validateOrigin(origin, other, isNew) {
+    if (!origin) return isNew ? '請選擇異常來源' : '';
+    if (ORIGINS.indexOf(origin) < 0) return '異常來源不在選項內';
+    if (origin === ORIGIN_OTHER) {
+      var t = String(other || '').trim();
+      if (!t) return '選「其他」時請填寫來源說明';
+      if (t.length > ORIGIN_OTHER_MAX) return '來源說明最多 ' + ORIGIN_OTHER_MAX + ' 個字';
+    }
+    return '';
+  }
+  function newLog(fields, at) {
+    at = at || nowIso();
+    return cleanLog(Object.assign({ id: newId('L'), date: localDate(), created_at: at, updated_at: at }, fields || {}));
+  }
+
+  // ---------- 合併 ----------
+  /**
+   * 欄位的修改時間。有 field_times 的資料(v1 起都有)只看該欄位自己的時間,沒記錄就當作最舊;
+   * 這樣 v1 資料(沒有 origin 的時間)或舊版手機傳來的包,不會用 updated_at 蓋掉別處填好的來源。
+   * 完全沒有 field_times 的極舊資料才退回 updated_at。
+   */
+  function fieldTime(it, f) {
+    var ft = it.field_times || {};
+    if (Object.keys(ft).length) return ft[f] || '';
+    return it.updated_at || '';
+  }
+  function mergeIssue(a, b) {
+    if (!a) return clone(b);
+    if (!b) return clone(a);
+    var out = clone(a);
+    ISSUE_FIELDS.forEach(function (f) {
+      if (fieldTime(b, f) > fieldTime(a, f)) { out[f] = b[f]; out.field_times[f] = fieldTime(b, f); }
+    });
+    if ((b.updated_at || '') > (out.updated_at || '')) out.updated_at = b.updated_at;
+    if (!out.created_at || (b.created_at && b.created_at < out.created_at)) out.created_at = b.created_at;
+    return out;
+  }
+  function mergeStates(a, b) {
+    var out = normalizeState(a);
+    b = normalizeState(b);
+    Object.keys(b.issues).forEach(function (id) { out.issues[id] = mergeIssue(out.issues[id], b.issues[id]); });
+    Object.keys(b.logs).forEach(function (id) {
+      var cur = out.logs[id];
+      if (!cur || (b.logs[id].updated_at || '') > (cur.updated_at || '')) out.logs[id] = clone(b.logs[id]);
+    });
+    Object.keys(b.processed_packages).forEach(function (id) { if (!out.processed_packages[id]) out.processed_packages[id] = b.processed_packages[id]; });
+    if ((b.updated_at || '') > (out.updated_at || '')) out.updated_at = b.updated_at;
+    return out;
+  }
+
+  // ---------- 推導 ----------
+  function daysBetween(fromYmd, toYmd) {
+    var a = Date.UTC(+fromYmd.slice(0, 4), +fromYmd.slice(5, 7) - 1, +fromYmd.slice(8, 10));
+    var b = Date.UTC(+toYmd.slice(0, 4), +toYmd.slice(5, 7) - 1, +toYmd.slice(8, 10));
+    return Math.round((b - a) / 86400000);
+  }
+  /** 逾期天數;沒逾期回 0。期限當天不算逾期。 */
+  function overdueDays(issue, today) {
+    if (!issue.due || issue.status === '結案') return 0;
+    var d = daysBetween(issue.due, today || localDate());
+    return d > 0 ? d : 0;
+  }
+  /** 清單上的狀態標籤 { label, tone: bad|warn|info|done } */
+  function badge(issue, today) {
+    var od = overdueDays(issue, today);
+    if (od) return { label: '逾期', tone: 'bad', days: od };
+    if (issue.status === '待回覆') return { label: '待回覆', tone: 'warn' };
+    if (issue.status === '結案') return { label: '結案', tone: 'done' };
+    return { label: '調查中', tone: 'info' };
+  }
+  function qtyText(issue) {
+    if (issue.defect_qty === '' && issue.total_qty === '') return '';
+    return (issue.defect_qty === '' ? '?' : issue.defect_qty) + '/' + (issue.total_qty === '' ? '?' : issue.total_qty);
+  }
+  function title(issue) { return [issue.supplier, issue.item].filter(Boolean).join(' ') || '(未命名異常)'; }
+
+  function liveIssues(state) {
+    return Object.keys(state.issues).map(function (k) { return state.issues[k]; }).filter(function (it) { return !it.deleted; });
+  }
+  function counts(state, today) {
+    var list = liveIssues(state);
+    return {
+      open: list.filter(function (it) { return it.status !== '結案'; }).length,
+      overdue: list.filter(function (it) { return overdueDays(it, today) > 0; }).length,
+      all: list.length
+    };
+  }
+  /**
+   * filter: open | overdue | all;q 搜尋供應商、品名、料號、不良描述。
+   * 排序:逾期(天數多的在前)→ 未結案依期限近到遠 → 結案依更新時間新到舊。
+   */
+  /** 來源篩選:'' = 全部;ORIGIN_NONE = 未指定;其餘 = ORIGINS 之一 */
+  function matchOrigin(it, origin) {
+    if (!origin) return true;
+    if (origin === ORIGIN_NONE) return !it.origin;
+    return it.origin === origin;
+  }
+  function filterIssues(state, filter, q, today, origin) {
+    today = today || localDate();
+    q = (q || '').trim().toLowerCase();
+    var list = liveIssues(state).filter(function (it) {
+      if (filter === 'open' && it.status === '結案') return false;
+      if (filter === 'overdue' && !overdueDays(it, today)) return false;
+      if (!matchOrigin(it, origin)) return false;
+      if (!q) return true;
+      return [it.supplier, it.item, it.part_no, it.defect, originLabel(it)].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    function rank(it) { return it.status === '結案' ? 2 : (overdueDays(it, today) ? 0 : 1); }
+    list.sort(function (a, b) {
+      var ra = rank(a), rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === 0) return overdueDays(b, today) - overdueDays(a, today);
+      if (ra === 1) return (a.due || '9999') < (b.due || '9999') ? -1 : (a.due || '9999') > (b.due || '9999') ? 1 : 0;
+      return (b.updated_at || '') < (a.updated_at || '') ? -1 : 1;
+    });
+    return list;
+  }
+  /** 各來源的筆數(套用狀態篩選後),給篩選 chips 顯示:{ '': 全部, IQC: n, …, __none__: n } */
+  function originCounts(state, filter, today) {
+    var list = filterIssues(state, filter, '', today);
+    var out = { '': list.length };
+    ORIGINS.forEach(function (o) { out[o] = 0; });
+    out[ORIGIN_NONE] = 0;
+    list.forEach(function (it) { out[it.origin || ORIGIN_NONE]++; });
+    return out;
+  }
+
+  /** 某筆異常的現場紀錄,新到舊 */
+  function issueLogs(state, issueId) {
+    return Object.keys(state.logs).map(function (k) { return state.logs[k]; })
+      .filter(function (l) { return l.issue_id === issueId && !l.deleted; })
+      .sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (a.created_at || '') < (b.created_at || '') ? 1 : -1;
+      });
+  }
+
+  // ---------- 不良品倉項目明細(手機版主畫面)----------
+  // 註記 = 看板的 state.annotations[項目id] = { status, owner, eta, updated_at },整筆以 updated_at 較新者為準(與看板 Core.mergeStates 相同)
+  var ITEM_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
+  function cleanAnnotation(x) {
+    if (!x || typeof x !== 'object') return null;
+    return { status: str(x.status, 200), owner: str(x.owner, 100), eta: dateOrEmpty(x.eta), supplier: str(x.supplier, 100), updated_at: str(x.updated_at, 40) };
+  }
+  /** 料號照片紀錄;照片檔名固定是 id + '.jpg' */
+  function cleanItemPhoto(x) {
+    if (!x || !ID_RE.test(x.id || '') || !ITEM_ID_RE.test(x.item_id || '') || x.name !== x.id + '.jpg') return null;
+    return {
+      id: x.id, item_id: x.item_id, name: x.name, taken_at: str(x.taken_at, 40), updated_at: str(x.updated_at, 40),
+      deleted: !!x.deleted, source: x.source === 'phone' ? 'phone' : 'desktop'
+    };
+  }
+  function newItemPhoto(itemId, source, at) {
+    at = at || nowIso();
+    var id = newId('I');
+    return { id: id, item_id: itemId, name: id + '.jpg', taken_at: at, updated_at: at, deleted: false, source: source || 'desktop' };
+  }
+  function cleanAnnotations(map) {
+    var out = {};
+    Object.keys(map || {}).forEach(function (id) {
+      if (!ITEM_ID_RE.test(id)) return;
+      var a = cleanAnnotation(map[id]);
+      if (a && a.updated_at) out[id] = a;
+    });
+    return out;
+  }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  /** 看板 Core.itemRows 的結果 → 手機清單用的精簡版 */
+  function trackerForSnapshot(rows, annotations, weeks) {
+    return {
+      latest_week: str(weeks && weeks.latest_week, 10),
+      latest_date: dateOrEmpty(weeks && weeks.latest_date),
+      items: (rows || []).map(function (r) {
+        // 看板 itemRows 已算好「實際顯示的註記」(含料號換倉沿用),有就用它;舊版看板才退回 annotations
+        var a = 'status' in r ? { status: r.status, owner: r.owner, eta: r.eta, supplier: r.supplier === r.wms_supplier && r.supplier_source !== 'manual' ? '' : r.supplier, updated_at: r.ann_updated_at }
+          : ((annotations || {})[r.id] || {});
+        return {
+          id: r.id, part_no: r.part_no, name: r.name || '', warehouse: r.warehouse,
+          qty: r.qty, usd_amount: r.usd_amount, last_seen_week: r.updated_week || '', in_latest_week: !!r.in_latest_week,
+          status: a.status || '', owner: a.owner || '', eta: a.eta || '', ann_updated_at: a.updated_at || '',
+          // supplier = 實際顯示的(手動填的優先,否則用 WMS 條碼庫存明細的);wms_supplier 讓手機知道清空手動值後要顯示什麼
+          supplier: a.supplier || r.wms_supplier || '', wms_supplier: r.wms_supplier || '',
+          photos: r.photos || []
+        };
+      })
+    };
+  }
+  function cleanTracker(t) {
+    if (!t || !Array.isArray(t.items)) return null;
+    return {
+      latest_week: str(t.latest_week, 10), latest_date: dateOrEmpty(t.latest_date),
+      items: t.items.filter(function (r) { return r && ITEM_ID_RE.test(r.id || ''); }).map(function (r) {
+        return {
+          id: r.id, part_no: str(r.part_no, 60), name: str(r.name, 200), warehouse: str(r.warehouse, 20),
+          qty: num(r.qty), usd_amount: num(r.usd_amount), last_seen_week: str(r.last_seen_week, 10), in_latest_week: !!r.in_latest_week,
+          status: str(r.status, 200), owner: str(r.owner, 100), eta: dateOrEmpty(r.eta), supplier: str(r.supplier, 100), wms_supplier: str(r.wms_supplier, 100),
+          ann_updated_at: str(r.ann_updated_at, 40),
+          photos: (Array.isArray(r.photos) ? r.photos : []).filter(function (p) { return PHOTO_RE.test(p); })
+        };
+      })
+    };
+  }
+  /** 手機顯示用:電腦清單的項目 + 手機上還沒傳送的註記與照片 */
+  function trackerItems(tracker, pendingAnnotations, pendingItemPhotos) {
+    if (!tracker) return [];
+    var addBy = {}, removed = {};
+    Object.keys(pendingItemPhotos || {}).forEach(function (k) {
+      var p = pendingItemPhotos[k];
+      if (p.deleted) removed[p.name] = true;
+      else (addBy[p.item_id] = addBy[p.item_id] || []).push(p.name);
+    });
+    return tracker.items.map(function (r) {
+      var out = r;
+      var p = (pendingAnnotations || {})[r.id];
+      if (p && (p.updated_at || '') > (r.ann_updated_at || '')) {
+        out = Object.assign({}, out, { status: p.status, owner: p.owner, eta: p.eta, supplier: p.supplier || r.wms_supplier || '', ann_updated_at: p.updated_at });
+      }
+      if (addBy[r.id] || r.photos.some(function (n) { return removed[n]; })) {
+        var names = (addBy[r.id] || []).slice().reverse().concat(r.photos).filter(function (n, i, arr) { return !removed[n] && arr.indexOf(n) === i; });
+        out = Object.assign({}, out, { photos: names });
+      }
+      return out;
+    }).sort(function (a, b) {
+      var x = a.warehouse + a.part_no, y = b.warehouse + b.part_no;
+      return x < y ? -1 : x > y ? 1 : 0;
+    });
+  }
+
+  // ---------- 手機 → 電腦:傳送包 ----------
+  /**
+   * @param {object} p { issues[], logs[], photos{檔名: base64 JPEG}, thumbs{檔名: base64 JPEG}, annotations{項目id: 註記}, device }
+   */
+  function makePackage(p) {
+    return {
+      type: 'dwt-quality-package', version: 1, id: newId('P'),
+      created_at: nowIso(), device: str(p.device, 60) || '手機',
+      issues: p.issues || [], logs: p.logs || [], photos: p.photos || {}, thumbs: p.thumbs || {},
+      annotations: p.annotations || {}, item_photos: p.item_photos || []
+    };
+  }
+  /**
+   * 把傳送包合併進 state(會改 state)。
+   * @returns {{ ok, duplicate?, message?, issues, logs, photos: {檔名: base64}, thumbs: {檔名: base64} }}
+   */
+  function applyPackage(state, pkg) {
+    if (!pkg || pkg.type !== 'dwt-quality-package' || pkg.version !== 1 || !ID_RE.test(pkg.id || '')) {
+      return { ok: false, message: '不是品質異常傳送包' };
+    }
+    // 註記一律交回看板合併(以 updated_at 判斷,重複處理也不會出錯)
+    var annotations = cleanAnnotations(pkg.annotations);
+    // 料號照片同理交回看板(以 updated_at 判斷);照片檔另外回傳 item_files / item_thumbs
+    var itemPhotos = (Array.isArray(pkg.item_photos) ? pkg.item_photos : []).map(cleanItemPhoto).filter(Boolean);
+    var itemNames = {};
+    itemPhotos.forEach(function (p) { if (!p.deleted) itemNames[p.name] = true; });
+    function pickNames(map, names) {
+      var out = {};
+      Object.keys(map || {}).forEach(function (name) {
+        if (PHOTO_RE.test(name) && names[name] && typeof map[name] === 'string') out[name] = map[name];
+      });
+      return out;
+    }
+    var itemFiles = pickNames(pkg.photos, itemNames), itemThumbs = pickNames(pkg.thumbs, itemNames);
+    if (state.processed_packages[pkg.id]) {
+      return { ok: true, duplicate: true, issues: 0, logs: 0, photos: {}, thumbs: {}, annotations: annotations, item_photos: itemPhotos, item_files: itemFiles, item_thumbs: itemThumbs };
+    }
+    var incoming = emptyState();
+    (pkg.issues || []).forEach(function (x) { var it = cleanIssue(x); if (it) incoming.issues[it.id] = it; });
+    (pkg.logs || []).forEach(function (x) { var lg = cleanLog(x); if (lg) { lg.source = 'phone'; incoming.logs[lg.id] = lg; } });
+    var referenced = {};
+    Object.keys(incoming.logs).forEach(function (id) { incoming.logs[id].photos.forEach(function (p) { referenced[p] = true; }); });
+    function pick(map) {
+      var out = {};
+      Object.keys(map || {}).forEach(function (name) {
+        if (PHOTO_RE.test(name) && referenced[name] && typeof map[name] === 'string') out[name] = map[name];
+      });
+      return out;
+    }
+    var merged = mergeStates(state, incoming);
+    state.issues = merged.issues; state.logs = merged.logs;
+    state.processed_packages[pkg.id] = {
+      at: nowIso(), device: str(pkg.device, 60), created_at: str(pkg.created_at, 40),
+      issues: Object.keys(incoming.issues).length, logs: Object.keys(incoming.logs).length,
+      annotations: Object.keys(annotations).length, item_photos: itemPhotos.length
+    };
+    state.updated_at = nowIso();
+    return {
+      ok: true, issues: Object.keys(incoming.issues).length, logs: Object.keys(incoming.logs).length,
+      photos: pick(pkg.photos), thumbs: pick(pkg.thumbs), annotations: annotations,
+      item_photos: itemPhotos, item_files: itemFiles, item_thumbs: itemThumbs
+    };
+  }
+
+  // ---------- 電腦 → 手機:清單快照 ----------
+  /** tracker = trackerForSnapshot(...)(不良品倉項目明細);沒有就省略 */
+  function makeSnapshot(state, thumbs, tracker) {
+    var s = normalizeState(state);
+    var out = {
+      type: 'dwt-quality-snapshot', version: 1, generated_at: nowIso(),
+      issues: s.issues, logs: s.logs, thumbs: thumbs || {}
+    };
+    if (tracker) out.tracker = tracker;
+    return out;
+  }
+  function readSnapshot(obj) {
+    if (!obj || obj.type !== 'dwt-quality-snapshot' || obj.version !== 1) return null;
+    var s = normalizeState({ issues: obj.issues, logs: obj.logs });
+    var thumbs = {};
+    Object.keys(obj.thumbs || {}).forEach(function (n) { if (PHOTO_RE.test(n) && typeof obj.thumbs[n] === 'string') thumbs[n] = obj.thumbs[n]; });
+    return { state: s, thumbs: thumbs, tracker: cleanTracker(obj.tracker), generated_at: str(obj.generated_at, 40) };
+  }
+  /**
+   * 手機載入新的電腦清單後:電腦已經收到的變更就從「待傳送」拿掉。
+   * pending = { issues{id: issue}, logs{id: log}, annotations{項目id: 註記} };回傳仍未被電腦確認的部分。
+   * tracker = 新清單裡的項目明細(沒有就保留所有待傳送的註記)。
+   */
+  function rebasePending(base, pending, tracker) {
+    var out = { issues: {}, logs: {}, annotations: {}, item_photos: {} };
+    var anns = {}, photoNames = {};
+    ((tracker && tracker.items) || []).forEach(function (r) {
+      anns[r.id] = r.ann_updated_at || '';
+      (r.photos || []).forEach(function (n) { photoNames[n] = true; });
+    });
+    Object.keys(pending.item_photos || {}).forEach(function (id) {
+      var p = pending.item_photos[id];
+      var confirmed = tracker && (p.deleted ? !photoNames[p.name] : !!photoNames[p.name]);
+      if (!confirmed) out.item_photos[id] = p;
+    });
+    Object.keys(pending.annotations || {}).forEach(function (id) {
+      var p = pending.annotations[id];
+      if (!(anns[id] != null && anns[id] >= (p.updated_at || ''))) out.annotations[id] = p;
+    });
+    Object.keys(pending.issues || {}).forEach(function (id) {
+      var p = pending.issues[id], b = base.issues[id];
+      var confirmed = !!b && Object.keys(p.field_times || {}).every(function (f) { return fieldTime(b, f) >= p.field_times[f]; });
+      if (!confirmed) out.issues[id] = p;
+    });
+    Object.keys(pending.logs || {}).forEach(function (id) {
+      var p = pending.logs[id], b = base.logs[id];
+      if (!(b && (b.updated_at || '') >= (p.updated_at || ''))) out.logs[id] = p;
+    });
+    return out;
+  }
+
+  return {
+    SCHEMA_VERSION: SCHEMA_VERSION, STATUSES: STATUSES, SCAR_STATES: SCAR_STATES, LOG_TYPES: LOG_TYPES,
+    ORIGINS: ORIGINS, ORIGIN_OTHER: ORIGIN_OTHER, ORIGIN_OTHER_MAX: ORIGIN_OTHER_MAX, ORIGIN_NONE: ORIGIN_NONE,
+    ISSUE_FIELDS: ISSUE_FIELDS, PHOTO_RE: PHOTO_RE,
+    setIssueFields: setIssueFields, originLabel: originLabel, validateOrigin: validateOrigin,
+    originCounts: originCounts, matchOrigin: matchOrigin,
+    nowIso: nowIso, localDate: localDate, shortDate: shortDate, newId: newId,
+    emptyState: emptyState, normalizeState: normalizeState, cleanIssue: cleanIssue, cleanLog: cleanLog,
+    newIssue: newIssue, setIssueField: setIssueField, newLog: newLog,
+    mergeIssue: mergeIssue, mergeStates: mergeStates,
+    overdueDays: overdueDays, badge: badge, qtyText: qtyText, title: title,
+    liveIssues: liveIssues, counts: counts, filterIssues: filterIssues, issueLogs: issueLogs,
+    cleanAnnotations: cleanAnnotations, cleanItemPhoto: cleanItemPhoto, newItemPhoto: newItemPhoto, trackerForSnapshot: trackerForSnapshot, cleanTracker: cleanTracker, trackerItems: trackerItems,
+    makePackage: makePackage, applyPackage: applyPackage,
+    makeSnapshot: makeSnapshot, readSnapshot: readSnapshot, rebasePending: rebasePending
+  };
+});
+
+</script>
+<script>
+/*
+ * quality-photo.js — 照片處理(瀏覽器端,桌面版與手機版共用)
+ * 壓縮成 JPEG(原圖最長邊 1600px、縮圖 320px),以及 Base64 / Uint8Array 轉換。
+ */
+(function (root) {
+  'use strict';
+
+  var FULL_SIDE = 1600, FULL_QUALITY = 0.8;
+  var THUMB_SIDE = 320, THUMB_QUALITY = 0.7;
+
+  function loadImage(blob) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('無法讀取這張照片(格式可能不支援)')); };
+      img.src = url;
+    });
+  }
+  function drawJpeg(img, maxSide, quality) {
+    var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    var scale = Math.min(1, maxSide / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return new Promise(function (resolve, reject) {
+      c.toBlob(function (b) { b ? resolve(b) : reject(new Error('照片轉檔失敗')); }, 'image/jpeg', quality);
+    });
+  }
+  /** 一張照片 → { full: Blob, thumb: Blob }(JPEG) */
+  async function prepare(file) {
+    var img = await loadImage(file);
+    return { full: await drawJpeg(img, FULL_SIDE, FULL_QUALITY), thumb: await drawJpeg(img, THUMB_SIDE, THUMB_QUALITY) };
+  }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { var s = String(r.result); resolve(s.slice(s.indexOf(',') + 1)); };
+      r.onerror = function () { reject(r.error); };
+      r.readAsDataURL(blob);
+    });
+  }
+  function base64ToBytes(b64) {
+    var bin = atob(b64), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function bytesToBase64(bytes) {
+    var s = '', chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    return btoa(s);
+  }
+  function dataUrl(b64) { return 'data:image/jpeg;base64,' + b64; }
+
+  root.DWTQualityPhoto = {
+    prepare: prepare, blobToBase64: blobToBase64, base64ToBytes: base64ToBytes,
+    bytesToBase64: bytesToBase64, dataUrl: dataUrl
+  };
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  var Q = window.DWTQualityCore, P = window.DWTQualityPhoto;
+  var appEl = document.getElementById('app');
+
+  // ---------- 範例(第一次打開、還沒載入電腦清單時顯示;不能修改、不會傳送) ----------
+  function sampleState() {
+    var t = '2026-10-01T00:00:00.000Z', s = Q.emptyState();
+    var a = Q.newIssue({ supplier: '範例供應商 A', item: '閥件', part_no: 'SAMPLE-001', defect: '把手鬆動', defect_qty: 49, total_qty: 400, scar: '已開', due: '2026-10-18', status: '調查中', containment: '100% 拉力 >10kg', origin: '產線' }, t);
+    var b = Q.newIssue({ supplier: '範例供應商 B', item: '來料', defect: 'IQC 外觀不良', scar: '已開', due: '2026-10-28', status: '待回覆', origin: 'IQC' }, t);
+    var c = Q.newIssue({ supplier: '範例供應商 C', defect: '尺寸超規', due: '2026-11-05', status: '調查中', origin: '其他', origin_other: '供應商自主回報' }, t);
+    [a, b, c].forEach(function (x) { s.issues[x.id] = x; });
+    var l1 = Q.newLog({ issue_id: a.id, date: '2026-10-21', type: '現場觀察', note: '線邊倉剩 34 pcs 隔離' }, t);
+    var l2 = Q.newLog({ issue_id: a.id, date: '2026-08-29', type: '量測', note: '400 pcs 中 49 pcs <10kg' }, t);
+    s.logs[l1.id] = l1; s.logs[l2.id] = l2;
+    return s;
+  }
+
+  // ---------- 手機端儲存(IndexedDB;不能用時只存在記憶體,並提醒盡快傳送) ----------
+  var store = (function () {
+    var dbp = null, ok = true;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (resolve, reject) {
+        try {
+          var req = indexedDB.open('dwt-quality-mobile', 1);
+          req.onupgradeneeded = function () { req.result.createObjectStore('kv'); };
+          req.onsuccess = function () { resolve(req.result); };
+          req.onerror = function () { reject(req.error); };
+        } catch (e) { reject(e); }
+      });
+      return dbp;
+    }
+    function op(mode, fn) {
+      return open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction('kv', mode), r = fn(tx.objectStore('kv'));
+          tx.oncomplete = function () { resolve(r && r.result); };
+          tx.onerror = function () { reject(tx.error); };
+        });
+      });
+    }
+    return {
+      get ok() { return ok; },
+      get: function (k) { return op('readonly', function (s) { return s.get(k); }).catch(function () { ok = false; return undefined; }); },
+      set: function (k, v) { return op('readwrite', function (s) { return s.put(v, k); }).catch(function () { ok = false; }); }
+    };
+  })();
+
+  // ---------- 狀態 ----------
+  var base = { state: Q.emptyState(), thumbs: {}, tracker: null, generated_at: '' };   // 最近一次載入的電腦清單
+  var pending = { issues: {}, logs: {}, annotations: {}, item_photos: {} };   // 手機上改過、電腦還沒確認的
+  var photos = {};                                                      // 待傳送照片:檔名 → { full: Blob, thumb: base64 }
+  var meta = { started: false, lastSentAt: '', device: '' };
+  // tab:items(項目明細,主畫面)| quality(品質異常)
+  // qorigin:品質異常的來源篩選('' = 全部,Q.ORIGIN_NONE = 未指定)
+  var ui = { tab: 'items', view: 'list', id: null, filter: 'open', q: '', qorigin: '', wh: 'all', iq: '', draft: null };
+  var downloads = null;
+
+  var sample = sampleState();
+  function isSample() { return !meta.started && !base.generated_at && !Object.keys(pending.issues).length; }
+  function shown() {
+    if (isSample()) return sample;
+    var s = Q.mergeStates(base.state, { issues: pending.issues, logs: pending.logs });
+    return s;
+  }
+  function thumbFor(name) {
+    if (photos[name]) return photos[name].thumb;
+    return base.thumbs[name] || '';
+  }
+  function pendingCount() {
+    return Object.keys(pending.issues).length + Object.keys(pending.logs).length + Object.keys(pending.annotations).length + Object.keys(pending.item_photos).length;
+  }
+  /** 還在等電腦確認的照片才留著原圖,其餘從手機刪掉省空間 */
+  function prunePhotos() {
+    var keep = {};
+    Object.keys(pending.logs).forEach(function (id) { pending.logs[id].photos.forEach(function (n) { keep[n] = true; }); });
+    Object.keys(pending.item_photos).forEach(function (id) { if (!pending.item_photos[id].deleted) keep[pending.item_photos[id].name] = true; });
+    Object.keys(photos).forEach(function (n) { if (!keep[n]) delete photos[n]; });
+  }
+  function save() {
+    return Promise.all([store.set('base', base), store.set('pending', pending), store.set('photos', photos), store.set('meta', meta)]);
+  }
+  function deviceName() {
+    var ua = navigator.userAgent || '';
+    return /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android 手機' : '瀏覽器';
+  }
+
+  // ---------- 小工具 ----------
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === 'text') e.textContent = v;
+      else if (k === 'class') e.className = v;
+      else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? '' : v);
+    });
+    (kids || []).forEach(function (c) { if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function icon(path) {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
+    s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = path;
+    return s;
+  }
+  var ICON = {
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'
+  };
+  var toastTimer = null;
+  function toast(msg) {
+    var old = document.querySelector('.toast'); if (old) old.remove();
+    var t = el('div', { class: 'toast', role: 'status', text: msg });
+    document.body.appendChild(t);
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.remove(); }, 4500);
+  }
+  function confirmSheet(text, okLabel) {
+    return new Promise(function (resolve) {
+      var box = el('div', { class: 'confirm' }, [el('div', { class: 'sheet' }, [
+        el('p', { class: 'log-note', text: text }),
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'pill-btn', text: '取消', onclick: function () { box.remove(); resolve(false); } }),
+          el('button', { type: 'button', class: 'pill-btn fill', text: okLabel, onclick: function () { box.remove(); resolve(true); } })
+        ])
+      ])]);
+      document.body.appendChild(box);
+    });
+  }
+  function fmtStamp(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function go(view, id) { if (view === 'list') ui.draft = null; ui.view = view; ui.id = id || null; render(); window.scrollTo(0, 0); }
+  function guardSample() {
+    if (!isSample()) return false;
+    toast('目前顯示的是範例。請先載入電腦清單,或按「開始使用」清空範例。');
+    return true;
+  }
+
+  // ---------- 同步:電腦清單 / 傳送到電腦 ----------
+  function pickSnapshot() { var i = document.getElementById('snap-input'); i.value = ''; i.click(); }
+  document.getElementById('snap-input').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    f.text().then(function (txt) {
+      var snap = null;
+      try { snap = Q.readSnapshot(JSON.parse(txt)); } catch (err) { snap = null; }
+      if (!snap) { toast('這不是「手機清單.json」。請到 OneDrive 的「手機同步」資料夾選「手機清單.json」。'); return; }
+      base = snap;
+      pending = Q.rebasePending(base.state, pending, base.tracker);
+      prunePhotos();
+      meta.started = true;
+      return save().then(function () {
+        var left = pendingCount();
+        toast('已載入電腦清單(' + fmtStamp(base.generated_at) + ' 產生)' + (left ? ',還有 ' + left + ' 筆電腦還沒收到' : ''));
+        render();
+      });
+    }).catch(function (err) { toast('讀取失敗:' + (err && err.message ? err.message : err)); });
+  });
+
+  /**
+   * 獨立 App 的傳送:iPhone 的分享選單必須在「按下按鈕的當下」開啟,前面做完檔案後已經太晚,
+   * 所以檔案備好後再顯示一個確認畫面,讓使用者按一下才開分享選單。不支援分享的瀏覽器改成下載。
+   */
+  function shareFile(filename, blob) {
+    return new Promise(function (resolve, reject) {
+      var file = new File([blob], filename, { type: 'application/json' });
+      var canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+      var box;
+      function close() { box.remove(); }
+      function cancelled() { close(); var e = new Error('cancelled'); e.code = 'declined'; reject(e); }
+      var go = el('button', { type: 'button', class: 'pill-btn fill', text: canShare ? '開啟分享選單' : '下載檔案', onclick: function () {
+        if (canShare) {
+          navigator.share({ files: [file] }).then(function () { close(); resolve(); }, function (err) {
+            if (err && err.name === 'AbortError') cancelled();
+            else { close(); reject(err); }
+          });
+        } else {
+          var url = URL.createObjectURL(file);
+          var a = el('a', { href: url, download: filename });
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+          close(); resolve();
+        }
+      } });
+      box = el('div', { class: 'confirm' }, [el('div', { class: 'sheet' }, [
+        el('p', { class: 'log-note', text: '傳送檔已經準備好' }),
+        el('p', { class: 'hint', text: (canShare ? '接著在分享選單選「儲存到檔案」' : '下載後請把檔案移到') + ',存到 OneDrive 的「手機同步 / 收件匣」資料夾。' }),
+        el('div', { class: 'row' }, [el('button', { type: 'button', class: 'pill-btn', text: '取消', onclick: cancelled }), go])
+      ])]);
+      document.body.appendChild(box);
+    });
+  }
+
+  async function sendToComputer(btn) {
+    if (!pendingCount()) { toast('沒有需要傳送的變更'); return; }
+    if (navigator.onLine === false) { toast('目前沒有網路。修改已經存在手機裡,回到有訊號的地方再傳送。'); return; }
+    btn.disabled = true;
+    try {
+      var logs = Object.keys(pending.logs).map(function (k) { return pending.logs[k]; });
+      var full = {}, thumbs = {};
+      for (var i = 0; i < logs.length; i++) {
+        for (var j = 0; j < logs[i].photos.length; j++) {
+          var n = logs[i].photos[j];
+          if (photos[n]) { full[n] = await P.blobToBase64(photos[n].full); thumbs[n] = photos[n].thumb; }
+        }
+      }
+      var itemPhotos = Object.keys(pending.item_photos).map(function (k) { return pending.item_photos[k]; });
+      for (var k = 0; k < itemPhotos.length; k++) {
+        var ip = itemPhotos[k];
+        if (!ip.deleted && photos[ip.name]) { full[ip.name] = await P.blobToBase64(photos[ip.name].full); thumbs[ip.name] = photos[ip.name].thumb; }
+      }
+      var pkg = Q.makePackage({
+        issues: Object.keys(pending.issues).map(function (k) { return pending.issues[k]; }),
+        logs: logs, photos: full, thumbs: thumbs, annotations: pending.annotations, item_photos: itemPhotos,
+        device: meta.device || deviceName()
+      });
+      var d = new Date(), stamp = Q.localDate(d).replace(/-/g, '') + '_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
+      var filename = '手機傳送_' + stamp + '.json';
+      var fileBlob = new Blob([JSON.stringify(pkg)], { type: 'application/json' });
+      if (downloads) await downloads.save({ filename: filename, data: fileBlob });   // claude.ai 頁面
+      else await shareFile(filename, fileBlob);                                       // 獨立 App(可離線版)
+      meta.lastSentAt = Q.nowIso();
+      await save();
+      toast('已產生傳送檔。請存到 OneDrive「手機同步/收件匣」資料夾,電腦看板會自動讀取。');
+    } catch (err) {
+      var code = err && err.code;
+      if (code === 'declined') toast('已取消傳送');
+      else if (code === 'rate_limited') toast('上一個存檔視窗還開著,請先完成或取消');
+      else toast('傳送失敗:' + (err && err.message ? err.message : err));
+    } finally {
+      btn.disabled = false;
+      render();
+    }
+  }
+
+  // ---------- 修改 ----------
+  function putIssue(it) { pending.issues[it.id] = it; meta.started = true; return save(); }
+  function changeIssue(id, changes) {
+    var cur = shown().issues[id];
+    if (!cur) return Promise.resolve();
+    var at = Q.nowIso();
+    Object.keys(changes).forEach(function (f) { if (String(cur[f]) !== String(changes[f])) cur = Q.setIssueField(cur, f, changes[f], at); });
+    var prev = pending.issues[id];
+    if (prev) cur = Q.mergeIssue(prev, cur);
+    // 只保留真的改過的欄位時間,電腦端才不會把沒改的欄位當成新的
+    if (!prev && cur.updated_at !== at) return Promise.resolve();
+    return putIssue(cur);
+  }
+
+  // ---------- 畫面 ----------
+  function render() {
+    appEl.textContent = '';
+    var bar = document.getElementById('tabbar');
+    bar.hidden = ui.view !== 'list';
+    bar.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-current', b.dataset.tab === ui.tab ? 'page' : 'false'); });
+    if (ui.view === 'detail') return renderDetail();
+    if (ui.view === 'log') return renderLogForm();
+    if (ui.view === 'issue') return renderIssueForm();
+    if (ui.view === 'item') return renderItemForm();
+    if (ui.tab === 'items') return renderItems();
+    renderList();
+  }
+  document.getElementById('tabbar').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    ui.tab = b.dataset.tab; go('list');
+  });
+
+  // ---------- 提醒:忘記傳送 / 電腦清單太舊 ----------
+  var SEND_REMIND_HOURS = 12, CONFIRM_REMIND_HOURS = 12, STALE_LIST_HOURS = 24;
+  function hoursSince(iso) { var t = Date.parse(iso || ''); return isNaN(t) ? 0 : (Date.now() - t) / 3600000; }
+  function agoText(h) { return h >= 48 ? Math.floor(h / 24) + ' 天' : Math.floor(h) + ' 小時'; }
+  /** 待傳送裡最早、最晚的修改時間 */
+  function pendingTimes() {
+    var times = [];
+    Object.keys(pending.issues).forEach(function (k) { times.push(pending.issues[k].updated_at); });
+    Object.keys(pending.logs).forEach(function (k) { times.push(pending.logs[k].updated_at || pending.logs[k].created_at); });
+    Object.keys(pending.annotations).forEach(function (k) { times.push(pending.annotations[k].updated_at); });
+    Object.keys(pending.item_photos).forEach(function (k) { times.push(pending.item_photos[k].updated_at); });
+    times = times.filter(Boolean).sort();
+    return { oldest: times[0] || '', newest: times[times.length - 1] || '' };
+  }
+  /** 回傳要顯示的提醒橫幅(沒有就 null) */
+  function reminderBanner() {
+    var msgs = [], n = pendingCount();
+    if (n) {
+      var t = pendingTimes();
+      var sentAfterLastChange = meta.lastSentAt && meta.lastSentAt >= t.newest;
+      if (!sentAfterLastChange && hoursSince(t.oldest) >= SEND_REMIND_HOURS) {
+        msgs.push('有 ' + n + ' 筆修改已經 ' + agoText(hoursSince(t.oldest)) + '還沒傳送到電腦。請按「傳送到電腦」,存到 OneDrive 的「手機同步/收件匣」。');
+      } else if (sentAfterLastChange && hoursSince(meta.lastSentAt) >= CONFIRM_REMIND_HOURS) {
+        msgs.push('傳送已經過了 ' + agoText(hoursSince(meta.lastSentAt)) + ',電腦還沒確認收到。請按「載入電腦清單」確認;如果還是顯示未傳送,可能檔案沒有存進「手機同步/收件匣」,再傳一次就好。');
+      }
+    }
+    if (base.generated_at && hoursSince(base.generated_at) >= STALE_LIST_HOURS) {
+      msgs.push('手機上的電腦清單是 ' + agoText(hoursSince(base.generated_at)) + '前的。新的一週資料或電腦上的修改不會出現,請按「載入電腦清單」更新。');
+    }
+    if (!msgs.length) return null;
+    return el('div', { class: 'banner', role: 'status' }, msgs.map(function (m) { return el('span', { text: m }); }));
+  }
+
+  /** 同步卡片(兩個分頁共用):待傳送筆數 + 傳送到電腦;電腦清單時間 + 載入 */
+  function syncCard() {
+    var n = pendingCount();
+    var offlineNote = navigator.onLine === false ? el('p', { class: 'hint', text: '目前沒有網路:可以繼續查看、修改、拍照,內容會存在手機。回到有訊號的地方再傳送。' }) : null;
+    var sendBtn = el('button', { type: 'button', class: 'pill-btn' + (n ? ' fill' : ''), text: '傳送到電腦', disabled: !n });
+    sendBtn.addEventListener('click', function () { sendToComputer(sendBtn); });
+    return el('section', { class: 'sync', 'aria-label': '同步' }, [
+      offlineNote,
+      el('div', { class: 'sync-row' }, [
+        el('span', {}, n ? [el('strong', { text: n + ' 筆' }), document.createTextNode(meta.lastSentAt ? ' 等電腦確認(' + fmtStamp(meta.lastSentAt) + ' 已傳送)' : ' 還沒傳送到電腦')] : ['手機上的變更都已傳到電腦']),
+        sendBtn
+      ]),
+      el('div', { class: 'sync-row' }, [
+        el('span', { text: base.generated_at ? '電腦清單 ' + fmtStamp(base.generated_at) : '還沒載入電腦清單' }),
+        el('button', { type: 'button', class: 'pill-btn', text: '載入電腦清單', onclick: pickSnapshot })
+      ])
+    ]);
+  }
+
+  // ---------- 項目明細(不良品倉;主畫面) ----------
+  function fmtUSD(v) { return 'US$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtQty(v) { return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); }
+  function annText(it) {
+    return [it.status ? '處理:' + it.status : '', it.owner ? 'Owner:' + it.owner : '', it.eta ? '預計 ' + Q.shortDate(it.eta) : ''].filter(Boolean).join(' · ');
+  }
+  function shownItems() { return Q.trackerItems(base.tracker, pending.annotations, pending.item_photos); }
+  function itemPending(id) {
+    if (pending.annotations[id]) return true;
+    return Object.keys(pending.item_photos).some(function (k) { return pending.item_photos[k].item_id === id; });
+  }
+
+  function renderItems() {
+    var t = base.tracker;
+    var all = shownItems();
+    appEl.appendChild(el('header', { class: 'bar home' }, [el('h1', { text: '項目明細' })]));
+    var wrap = el('div', { class: 'stack' });
+    appEl.appendChild(wrap);
+    if (!store.ok) wrap.appendChild(el('div', { class: 'banner', text: '這個瀏覽器無法保存資料,關掉頁面就會消失。修改後請馬上「傳送到電腦」。' }));
+    var rb = reminderBanner(); if (rb) wrap.appendChild(rb);
+    wrap.appendChild(syncCard());
+    if (!t) {
+      wrap.appendChild(el('div', { class: 'banner info' }, [
+        el('span', { text: '項目明細來自電腦上的不良品倉看板。請按「載入電腦清單」,從 OneDrive 選「手機同步/手機清單.json」。電腦要先裝 1.3.0 以上的看板,清單裡才會有項目明細。' })
+      ]));
+      return;
+    }
+    // 最新週兩倉合計
+    var sums = {};
+    all.forEach(function (it) { if (it.in_latest_week) sums[it.warehouse] = (sums[it.warehouse] || 0) + it.usd_amount; });
+    wrap.appendChild(el('section', { class: 'totals', 'aria-label': '最新週合計' }, Object.keys(sums).sort().map(function (wh) {
+      return el('div', { class: 'total' }, [el('span', { class: 'total-label', text: wh + ' · ' + (t.latest_week || '') }), el('span', { class: 'total-value', text: fmtUSD(sums[wh]) })]);
+    })));
+
+    var search = el('input', { type: 'search', class: 'search', placeholder: '搜尋料號、品名、供應商', 'aria-label': '搜尋項目', value: ui.iq });
+    search.addEventListener('input', function () { ui.iq = search.value; draw(); });
+    wrap.appendChild(search);
+    // 主清單只有最新一週還在不良品倉的料號;已轉出的收在最下面,點開才顯示
+    var current = all.filter(function (it) { return it.in_latest_week; });
+    var gone = all.filter(function (it) { return !it.in_latest_week; });
+    var whs = ['all', '大園倉', '新竹倉'];
+    var chips = el('div', { class: 'chips', role: 'group', 'aria-label': '倉別' });
+    whs.forEach(function (w) {
+      var n = w === 'all' ? current.length : current.filter(function (it) { return it.warehouse === w; }).length;
+      chips.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(ui.wh === w), text: (w === 'all' ? '全部' : w) + ' ' + n, onclick: function () { ui.wh = w; render(); } }));
+    });
+    wrap.appendChild(chips);
+    var list = el('div', { class: 'stack' });
+    wrap.appendChild(list);
+    var goneToggle = el('button', { type: 'button', class: 'text-btn' });
+    var goneList = el('div', { class: 'stack' });
+    wrap.appendChild(goneToggle);
+    wrap.appendChild(goneList);
+
+    function match(it) {
+      var q = ui.iq.trim().toLowerCase();
+      if (ui.wh !== 'all' && it.warehouse !== ui.wh) return false;
+      return !q || [it.part_no, it.name, it.owner, it.status, it.supplier].join(' ').toLowerCase().indexOf(q) >= 0;
+    }
+    function draw() {
+      list.textContent = ''; goneList.textContent = '';
+      var rows = current.filter(match);
+      var goneRows = gone.filter(match);
+      goneToggle.hidden = !goneRows.length;
+      goneToggle.textContent = (ui.showGone ? '收起' : '顯示') + '已轉出不良品倉(' + goneRows.length + ')';
+      goneToggle.onclick = function () { ui.showGone = !ui.showGone; draw(); };
+      if (!rows.length) {
+        var msg = !all.length ? '電腦清單裡還沒有項目' : (ui.wh !== 'all' && !ui.iq.trim() ? ui.wh + '本週沒有不良品庫存' : '沒有符合的項目');
+        list.appendChild(el('p', { class: 'empty', text: msg }));
+      }
+      rows.forEach(function (it) { list.appendChild(card(it)); });
+      if (ui.showGone) goneRows.forEach(function (it) { goneList.appendChild(card(it)); });
+    }
+    function card(it) {
+        var ann = annText(it);
+        return el('button', { type: 'button', class: 'card' + (it.in_latest_week ? '' : ' gone'), onclick: function () { go('item', it.id); } }, [
+          el('span', { class: 'card-top' }, [
+            el('span', { class: 'card-title num', text: it.part_no }),
+            itemPending(it.id) ? el('span', { class: 'badge pending', text: '未傳送' }) : null,
+            el('span', { class: 'badge ' + (it.in_latest_week ? 'info' : 'done'), text: it.in_latest_week ? it.warehouse : '已不在 ' + (t.latest_week || '最新週') })
+          ]),
+          it.name ? el('span', { class: 'card-line muted', text: it.name }) : null,
+          el('span', { class: 'card-line num', text: fmtQty(it.qty) + ' pcs · ' + fmtUSD(it.usd_amount) + (it.in_latest_week ? '' : '(' + it.last_seen_week + ')') }),
+          el('span', { class: 'card-line' + (it.supplier ? '' : ' muted'), text: (it.supplier ? '供應商:' + it.supplier : '未填供應商') + (it.photos.length ? ' · 照片 ' + it.photos.length : '') }),
+          el('span', { class: 'card-line ' + (ann ? '' : 'muted'), text: ann || '尚未填寫處理狀態' })
+        ]);
+    }
+    draw();
+  }
+
+  function renderItemForm() {
+    var all = shownItems();
+    var it = all.filter(function (x) { return x.id === ui.id; })[0];
+    if (!it) return go('list');
+    // 草稿:切到別的 App(例如拍照)再回來,輸入的內容還在
+    var d = ui.draft && ui.draft.itemId === it.id ? ui.draft : (ui.draft = { itemId: it.id, status: it.status, owner: it.owner, eta: it.eta, supplier: it.supplier, add: [], remove: {} });
+    var saveBtn = el('button', { type: 'button', class: 'text-btn strong r', text: '儲存' });
+    appEl.appendChild(el('header', { class: 'bar' }, [
+      el('button', { type: 'button', class: 'text-btn l', text: '取消', onclick: function () { ui.draft = null; go('list'); } }),
+      el('h1', { text: it.part_no }),
+      saveBtn
+    ]));
+    var grid = el('div', { class: 'photo-grid' });
+    function drawPics() {
+      grid.textContent = '';
+      it.photos.filter(function (n) { return !d.remove[n]; }).forEach(function (n) {
+        var t = thumbFor(n);
+        grid.appendChild(el('div', { class: 'photo-cell' }, [
+          t ? el('img', { src: P.dataUrl(t), alt: '料號照片', onclick: function () { openPhoto(n); } }) : el('span', { class: 'thumb ph', text: '照片' }),
+          el('button', { type: 'button', class: 'rm', 'aria-label': '刪除照片', text: '×', onclick: function () { d.remove[n] = true; drawPics(); } })
+        ]));
+      });
+      d.add.forEach(function (p, i) {
+        grid.appendChild(el('div', { class: 'photo-cell' }, [
+          el('img', { src: P.dataUrl(p.thumb), alt: '新照片 ' + (i + 1) }),
+          el('button', { type: 'button', class: 'rm', 'aria-label': '移除照片', text: '×', onclick: function () { d.add.splice(i, 1); drawPics(); } })
+        ]));
+      });
+      var input = el('input', { type: 'file', accept: 'image/*', multiple: true, 'aria-label': '拍照或選擇照片' });
+      input.addEventListener('change', async function () {
+        var files = Array.prototype.slice.call(input.files || []);
+        for (var i = 0; i < files.length; i++) {
+          try { var pic = await P.prepare(files[i]); d.add.push({ full: pic.full, thumb: await P.blobToBase64(pic.thumb) }); }
+          catch (err) { toast(err.message || String(err)); }
+        }
+        drawPics();
+      });
+      grid.appendChild(el('label', { class: 'photo-add' }, [icon(ICON.camera), input]));
+    }
+    drawPics();
+    var supplier = el('input', { id: 'it-supplier', class: 'f-input', type: 'text', list: 'dl-supplier', placeholder: '供應商名稱', value: d.supplier });
+    supplier.addEventListener('input', function () { d.supplier = supplier.value; });
+    function datalist(id, field) {
+      var seen = {};
+      all.forEach(function (x) { if (x[field]) seen[x[field]] = 1; });
+      return el('datalist', { id: id }, Object.keys(seen).sort().map(function (v) { return el('option', { value: v }); }));
+    }
+    var status = el('input', { id: 'it-status', class: 'f-input', type: 'text', list: 'dl-status', placeholder: '例如:待報廢、退回供應商', value: d.status });
+    var owner = el('input', { id: 'it-owner', class: 'f-input', type: 'text', list: 'dl-owner', placeholder: '負責人', value: d.owner });
+    var eta = el('input', { id: 'it-eta', class: 'f-input', type: 'date', value: d.eta });
+    status.addEventListener('input', function () { d.status = status.value; });
+    owner.addEventListener('input', function () { d.owner = owner.value; });
+    eta.addEventListener('change', function () { d.eta = eta.value; });
+    appEl.appendChild(el('div', { class: 'stack' }, [
+      el('section', { class: 'sheet' }, [el('dl', { class: 'kv' }, [
+        el('dt', { text: '品名' }), el('dd', { text: it.name || '—' }),
+        el('dt', { text: '倉別' }), el('dd', { text: it.warehouse }),
+        el('dt', { text: '數量' }), el('dd', { text: fmtQty(it.qty) + ' pcs' }),
+        el('dt', { text: '金額' }), el('dd', { text: fmtUSD(it.usd_amount) }),
+        el('dt', { text: '最後出現' }), el('dd', { text: it.last_seen_week + (it.in_latest_week ? '(最新週)' : '') })
+      ])]),
+      el('form', { class: 'form', onsubmit: function (e) { e.preventDefault(); } }, [
+        el('div', {}, [el('span', { class: 'f-label', text: '照片' }), grid]),
+        el('div', {}, [el('label', { class: 'f-label', for: 'it-supplier', text: '供應商' }), supplier, datalist('dl-supplier', 'supplier')]),
+        el('div', {}, [el('label', { class: 'f-label', for: 'it-status', text: '處理狀態' }), status, datalist('dl-status', 'status')]),
+        el('div', { class: 'f-grid' }, [
+          el('div', {}, [el('label', { class: 'f-label', for: 'it-owner', text: 'Owner' }), owner, datalist('dl-owner', 'owner')]),
+          el('div', {}, [el('label', { class: 'f-label', for: 'it-eta', text: '預計完成時間' }), eta])
+        ]),
+        el('p', { class: 'hint', text: '儲存後先存在手機,按「傳送到電腦」才會更新電腦上的看板。' })
+      ])
+    ]));
+    saveBtn.addEventListener('click', async function () {
+      var next = { status: d.status.trim(), owner: d.owner.trim(), eta: d.eta, supplier: d.supplier.trim() };
+      var annChanged = next.status !== it.status || next.owner !== it.owner || next.eta !== it.eta || next.supplier !== it.supplier;
+      // 供應商和 WMS 帶入的一樣 → 不存成手動值(之後 WMS 更新時才會跟著更新)
+      if (next.supplier === it.wms_supplier) next.supplier = '';
+      var removeNames = Object.keys(d.remove);
+      if (!annChanged && !d.add.length && !removeNames.length) { ui.draft = null; go('list'); return; }
+      saveBtn.disabled = true;
+      var at = Q.nowIso();
+      if (annChanged) { next.updated_at = at; pending.annotations[it.id] = next; }
+      d.add.forEach(function (p) {
+        var rec = Q.newItemPhoto(it.id, 'phone', at);
+        photos[rec.name] = { full: p.full, thumb: p.thumb };
+        pending.item_photos[rec.id] = rec;
+      });
+      removeNames.forEach(function (n) {
+        var id = n.replace(/\.jpg$/, '');
+        if (pending.item_photos[id] && !pending.item_photos[id].deleted) { delete pending.item_photos[id]; return; }  // 還沒傳過的照片,直接拿掉
+        pending.item_photos[id] = { id: id, item_id: it.id, name: n, taken_at: '', updated_at: at, deleted: true, source: 'phone' };
+      });
+      prunePhotos();
+      meta.started = true;
+      await save();
+      ui.draft = null;
+      toast('已儲存在手機。記得「傳送到電腦」。');
+      go('list');
+    });
+  }
+
+  function renderList() {
+    var s = shown(), today = Q.localDate();
+    var c = Q.counts(s, today);
+    appEl.appendChild(el('header', { class: 'bar home' }, [
+      el('h1', { text: '品質異常紀錄' }),
+      el('button', { type: 'button', class: 'icon-btn r', 'aria-label': '新增異常', onclick: function () { if (guardSample()) return; ui.draft = null; go('issue', null); } }, [icon(ICON.plus)])
+    ]));
+    var wrap = el('div', { class: 'stack' });
+    appEl.appendChild(wrap);
+
+    if (!store.ok) wrap.appendChild(el('div', { class: 'banner', text: '這個瀏覽器無法保存資料,關掉頁面就會消失。新增紀錄後請馬上「傳送到電腦」。' }));
+    if (isSample()) {
+      wrap.appendChild(el('div', { class: 'banner info' }, [
+        el('span', { text: '下面是範例資料。載入電腦產生的「手機清單.json」就會換成你的紀錄;也可以直接開始新增。' }),
+        el('div', { class: 'sync-row' }, [
+          el('button', { type: 'button', class: 'pill-btn fill', text: '載入電腦清單', onclick: pickSnapshot }),
+          el('button', { type: 'button', class: 'pill-btn', text: '開始使用(清空範例)', onclick: function () { meta.started = true; save(); render(); } })
+        ])
+      ]));
+    } else {
+      var rb = reminderBanner(); if (rb) wrap.appendChild(rb);
+      wrap.appendChild(syncCard());
+    }
+
+    var search = el('input', { type: 'search', class: 'search', placeholder: '搜尋料號、供應商', 'aria-label': '搜尋', value: ui.q });
+    search.addEventListener('input', function () { ui.q = search.value; drawCards(); });
+    wrap.appendChild(search);
+    var chips = el('div', { class: 'chips', role: 'group', 'aria-label': '篩選' });
+    [['open', '未結案 ' + c.open], ['overdue', '逾期 ' + c.overdue], ['all', '全部']].forEach(function (p) {
+      chips.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(ui.filter === p[0]), text: p[1], onclick: function () { ui.filter = p[0]; render(); } }));
+    });
+    wrap.appendChild(chips);
+    // 異常來源篩選:全部 + 6 個來源 + 未指定(筆數跟著上面的狀態篩選變)
+    var oc = Q.originCounts(s, ui.filter, today);
+    var originChips = el('div', { class: 'chips scroll', role: 'group', 'aria-label': '異常來源' });
+    [['', '全部來源']].concat(Q.ORIGINS.map(function (o) { return [o, o]; }), [[Q.ORIGIN_NONE, '未指定']]).forEach(function (p) {
+      originChips.appendChild(el('button', {
+        type: 'button', class: 'chip small', 'aria-pressed': String(ui.qorigin === p[0]), text: p[1] + ' ' + oc[p[0]],
+        onclick: function () { ui.qorigin = p[0]; render(); }
+      }));
+    });
+    wrap.appendChild(originChips);
+    var list = el('div', { class: 'stack' });
+    wrap.appendChild(list);
+
+    function drawCards() {
+      list.textContent = '';
+      var rows = Q.filterIssues(s, ui.filter, ui.q, today, ui.qorigin);
+      if (!rows.length) {
+        list.appendChild(el('p', { class: 'empty', text: c.all ? '沒有符合的異常' : '還沒有異常紀錄。按右上角 + 新增第一筆。' }));
+        return;
+      }
+      rows.forEach(function (it) {
+        var b = Q.badge(it, today);
+        var l2 = [it.defect, Q.qtyText(it)].filter(Boolean).join(' · ');
+        var l3 = [it.scar && it.scar !== '未開' ? 'SCAR ' + it.scar : '', it.due ? '期限 ' + Q.shortDate(it.due) : ''].filter(Boolean).join(' · ');
+        list.appendChild(el('button', { type: 'button', class: 'card' + (b.tone === 'bad' ? ' bad' : ''), onclick: function () { go('detail', it.id); } }, [
+          el('span', { class: 'card-top' }, [
+            el('span', { class: 'card-title', text: Q.title(it) }),
+            pending.issues[it.id] ? el('span', { class: 'badge pending', text: '未傳送' }) : null,
+            el('span', { class: 'badge ' + b.tone, text: b.label })
+          ]),
+          l2 ? el('span', { class: 'card-line', text: l2 }) : null,
+          el('span', { class: 'card-meta' }, [
+            el('span', { class: 'badge origin' + (it.origin ? '' : ' none'), text: Q.originLabel(it) }),
+            l3 ? el('span', { class: 'card-line', text: l3 }) : null
+          ])
+        ]));
+      });
+    }
+    drawCards();
+  }
+
+  function renderDetail() {
+    var s = shown(), it = s.issues[ui.id];
+    if (!it || it.deleted) return go('list');
+    var b = Q.badge(it, Q.localDate());
+    appEl.appendChild(el('header', { class: 'bar' }, [
+      el('button', { type: 'button', class: 'icon-btn l', 'aria-label': '返回清單', onclick: function () { go('list'); } }, [icon(ICON.back)]),
+      el('h1', { text: Q.title(it) }),
+      el('button', { type: 'button', class: 'icon-btn r', 'aria-label': '編輯異常', onclick: function () { if (guardSample()) return; go('issue', it.id); } }, [icon(ICON.edit)])
+    ]));
+    var logs = Q.issueLogs(s, it.id);
+    var tl = el('ol', { class: 'timeline' });
+    if (!logs.length) tl.appendChild(el('li', {}, [el('span', { class: 'hint', text: '還沒有現場紀錄' })]));
+    logs.forEach(function (l) {
+      tl.appendChild(el('li', {}, [
+        el('div', { class: 'log-meta' }, [
+          el('span', { text: Q.shortDate(l.date) + ' ' + l.type }),
+          l.status_to ? el('span', { class: 'badge done', text: '→ ' + l.status_to }) : null,
+          pending.logs[l.id] ? el('span', { class: 'badge pending', text: '未傳送' }) : null
+        ]),
+        l.note ? el('p', { class: 'log-note', text: l.note }) : null,
+        l.photos.length ? el('div', { class: 'thumbs' }, l.photos.map(function (n) {
+          var t = thumbFor(n);
+          if (!t) return el('span', { class: 'thumb ph', text: '照片' });
+          return el('button', { type: 'button', class: 'thumb', 'aria-label': '看照片', onclick: function () { openPhoto(n); } }, [el('img', { src: P.dataUrl(t), alt: '' })]);
+        })) : null
+      ]));
+    });
+    appEl.appendChild(el('div', { class: 'stack' }, [
+      el('div', {}, [el('span', { class: 'badge ' + b.tone, text: b.days ? '逾期 ' + b.days + ' 天' : b.label })]),
+      el('section', { class: 'sheet' }, [
+        el('dl', { class: 'kv' }, [
+          el('dt', { text: '異常來源' }), el('dd', { class: it.origin ? '' : 'muted', text: Q.originLabel(it) }),
+          el('dt', { text: '料號' }), el('dd', { text: it.part_no || '—' }),
+          el('dt', { text: '不良' }), el('dd', { text: [it.defect, Q.qtyText(it)].filter(Boolean).join(' ') || '—' }),
+          el('dt', { text: 'SCAR' }), el('dd', { text: it.scar }),
+          el('dt', { text: '期限' }), el('dd', { text: it.due ? Q.shortDate(it.due) : '—' }),
+          el('dt', { text: '暫時對策' }), el('dd', { text: it.containment || '—' })
+        ]),
+        el('div', { class: 'sec-head' }, [
+          el('h2', { text: '現場紀錄' }),
+          el('button', { type: 'button', class: 'text-btn', text: '+ 新增', onclick: function () { if (guardSample()) return; ui.draft = { type: '現場觀察', note: '', status: '', pics: [] }; go('log', it.id); } })
+        ]),
+        tl
+      ])
+    ]));
+  }
+
+  function openPhoto(name) {
+    var src = photos[name] ? URL.createObjectURL(photos[name].full) : P.dataUrl(base.thumbs[name] || '');
+    var box = el('div', { class: 'lightbox', role: 'dialog', 'aria-label': '照片', onclick: function () { if (photos[name]) URL.revokeObjectURL(src); box.remove(); } }, [el('img', { src: src, alt: '現場照片' })]);
+    document.body.appendChild(box);
+  }
+
+  function renderLogForm() {
+    var s = shown(), it = s.issues[ui.id];
+    if (!it) return go('list');
+    var d = ui.draft || (ui.draft = { type: '現場觀察', note: '', status: '', pics: [] });
+    var saveBtn = el('button', { type: 'button', class: 'text-btn strong r', text: '儲存' });
+    appEl.appendChild(el('header', { class: 'bar' }, [
+      el('button', { type: 'button', class: 'text-btn l', text: '取消', onclick: function () { ui.draft = null; go('detail', it.id); } }),
+      el('h1', { text: '新增紀錄' }),
+      saveBtn
+    ]));
+    var types = el('div', { class: 'chips', role: 'group', 'aria-label': '類型' });
+    Q.LOG_TYPES.forEach(function (t) {
+      types.appendChild(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(d.type === t), text: t, onclick: function () { d.type = t; types.querySelectorAll('.chip').forEach(function (x) { x.setAttribute('aria-pressed', String(x.textContent === t)); }); } }));
+    });
+    var note = el('textarea', { id: 'log-note', class: 'f-input', placeholder: '例如:線邊倉剩 34 pcs,已貼隔離標籤' });
+    note.value = d.note;
+    note.addEventListener('input', function () { d.note = note.value; });
+    var grid = el('div', { class: 'photo-grid' });
+    function drawPics() {
+      grid.textContent = '';
+      d.pics.forEach(function (p, i) {
+        grid.appendChild(el('div', { class: 'photo-cell' }, [
+          el('img', { src: P.dataUrl(p.thumb), alt: '照片 ' + (i + 1) }),
+          el('button', { type: 'button', class: 'rm', 'aria-label': '移除照片', text: '×', onclick: function () { d.pics.splice(i, 1); drawPics(); } })
+        ]));
+      });
+      if (d.pics.length < 9) {
+        var input = el('input', { type: 'file', accept: 'image/*', multiple: true, 'aria-label': '拍照或選擇照片' });
+        input.addEventListener('change', async function () {
+          var files = Array.prototype.slice.call(input.files || []);
+          for (var i = 0; i < files.length && d.pics.length < 9; i++) {
+            try { var pic = await P.prepare(files[i]); d.pics.push({ full: pic.full, thumb: await P.blobToBase64(pic.thumb) }); }
+            catch (err) { toast(err.message || String(err)); }
+          }
+          drawPics();
+        });
+        grid.appendChild(el('label', { class: 'photo-add' }, [icon(ICON.camera), input]));
+      }
+    }
+    drawPics();
+    var status = el('select', { id: 'log-status', class: 'f-input' }, [el('option', { value: '', text: '不變更(目前:' + it.status + ')' })].concat(Q.STATUSES.map(function (x) { return el('option', { value: x, text: x }); })));
+    status.value = d.status;
+    status.addEventListener('change', function () { d.status = status.value; });
+    var date = el('input', { id: 'log-date', type: 'date', class: 'f-input', value: d.date || Q.localDate() });
+    date.addEventListener('change', function () { d.date = date.value; });
+
+    appEl.appendChild(el('form', { class: 'form', onsubmit: function (e) { e.preventDefault(); } }, [
+      el('div', {}, [el('span', { class: 'f-label', text: '類型' }), types]),
+      el('div', {}, [el('label', { class: 'f-label', for: 'log-note', text: '註解' }), note]),
+      el('div', {}, [el('span', { class: 'f-label', text: '照片' }), grid]),
+      el('div', { class: 'f-grid' }, [
+        el('div', {}, [el('label', { class: 'f-label', for: 'log-status', text: '更新狀態(選填)' }), status]),
+        el('div', {}, [el('label', { class: 'f-label', for: 'log-date', text: '日期' }), date])
+      ])
+    ]));
+
+    saveBtn.addEventListener('click', async function () {
+      if (!d.note.trim() && !d.pics.length) { toast('請輸入註解或拍一張照片'); return; }
+      saveBtn.disabled = true;
+      var log = Q.newLog({ issue_id: it.id, date: d.date || Q.localDate(), type: d.type, note: d.note.trim(), status_to: d.status, source: 'phone' });
+      log.photos = d.pics.map(function (p, i) { var n = log.id + '-' + (i + 1) + '.jpg'; photos[n] = { full: p.full, thumb: p.thumb }; return n; });
+      pending.logs[log.id] = log;
+      meta.started = true;
+      if (d.status && d.status !== it.status) await changeIssue(it.id, { status: d.status });
+      await save();
+      ui.draft = null;
+      toast('已儲存在手機。記得「傳送到電腦」。');
+      go('detail', it.id);
+    });
+  }
+
+  function renderIssueForm() {
+    var s = shown();
+    var cur = ui.id ? s.issues[ui.id] : null;
+    var d = ui.draft || (ui.draft = cur ? JSON.parse(JSON.stringify(cur)) : { supplier: '', item: '', part_no: '', defect: '', defect_qty: '', total_qty: '', scar: '未開', due: '', status: '調查中', containment: '', origin: '', origin_other: '' });
+    if (d.origin == null) d.origin = '';
+    if (d.origin_other == null) d.origin_other = '';
+    var saveBtn = el('button', { type: 'button', class: 'text-btn strong r', text: '儲存' });
+    appEl.appendChild(el('header', { class: 'bar' }, [
+      el('button', { type: 'button', class: 'text-btn l', text: '取消', onclick: function () { ui.draft = null; go(cur ? 'detail' : 'list', cur ? cur.id : null); } }),
+      el('h1', { text: cur ? '編輯異常' : '新增異常' }),
+      saveBtn
+    ]));
+    function input(f, label, type, extra) {
+      var i = el('input', Object.assign({ id: 'is-' + f, class: 'f-input', type: type || 'text' }, extra || {}));
+      i.value = d[f] === '' || d[f] == null ? '' : String(d[f]);
+      i.addEventListener('input', function () { d[f] = i.value; });
+      return el('div', {}, [el('label', { class: 'f-label', for: 'is-' + f, text: label }), i]);
+    }
+    function select(f, label, opts) {
+      var sel = el('select', { id: 'is-' + f, class: 'f-input' }, opts.map(function (o) { return el('option', { value: o, text: o }); }));
+      sel.value = d[f];
+      sel.addEventListener('change', function () { d[f] = sel.value; });
+      return el('div', {}, [el('label', { class: 'f-label', for: 'is-' + f, text: label }), sel]);
+    }
+    var cont = el('textarea', { id: 'is-containment', class: 'f-input', placeholder: '例如:100% 拉力 >10kg' });
+    cont.value = d.containment || '';
+    cont.addEventListener('input', function () { d.containment = cont.value; });
+    // 異常來源:新增時必填;選「其他」才顯示自填格(必填,最多 40 字);換成其他選項時清空自填
+    var originSel = el('select', { id: 'is-origin', class: 'f-input' },
+      [el('option', { value: '', text: cur ? '未指定' : '請選擇…', disabled: !!(cur && cur.origin) })]
+        .concat(Q.ORIGINS.map(function (o) { return el('option', { value: o, text: o }); })));
+    originSel.value = d.origin;
+    var otherInput = el('input', { id: 'is-origin-other', class: 'f-input', type: 'text', maxlength: String(Q.ORIGIN_OTHER_MAX), placeholder: '請說明來源(最多 ' + Q.ORIGIN_OTHER_MAX + ' 字)', 'aria-label': '其他來源說明' });
+    otherInput.value = d.origin === Q.ORIGIN_OTHER ? d.origin_other : '';
+    var otherWrap = el('div', { class: 'origin-other' }, [otherInput]);
+    var originErr = el('p', { class: 'f-error', role: 'alert' });
+    function syncOther() { otherWrap.hidden = originSel.value !== Q.ORIGIN_OTHER; }
+    originSel.addEventListener('change', function () {
+      d.origin = originSel.value;
+      if (d.origin !== Q.ORIGIN_OTHER) { d.origin_other = ''; otherInput.value = ''; }
+      originErr.textContent = '';
+      syncOther();
+      if (d.origin === Q.ORIGIN_OTHER) otherInput.focus();
+    });
+    otherInput.addEventListener('input', function () { d.origin_other = otherInput.value; originErr.textContent = ''; });
+    syncOther();
+    var originBlock = el('div', {}, [
+      el('label', { class: 'f-label', for: 'is-origin', text: '異常來源' + (cur ? '' : '(必填)') }), originSel, otherWrap, originErr
+    ]);
+    var form = el('form', { class: 'form', onsubmit: function (e) { e.preventDefault(); } }, [
+      el('div', { class: 'f-grid' }, [input('supplier', '供應商', 'text', { placeholder: '供應商名稱' }), input('item', '品名', 'text', { placeholder: '品名' })]),
+      originBlock,
+      input('part_no', '料號'),
+      input('defect', '不良描述', 'text', { placeholder: '把手鬆動' }),
+      el('div', { class: 'f-grid' }, [input('defect_qty', '不良數', 'number', { inputmode: 'decimal', min: '0' }), input('total_qty', '總數', 'number', { inputmode: 'decimal', min: '0' })]),
+      el('div', { class: 'f-grid' }, [select('scar', 'SCAR', Q.SCAR_STATES), input('due', '期限', 'date')]),
+      select('status', '處理狀態', Q.STATUSES),
+      el('div', {}, [el('label', { class: 'f-label', for: 'is-containment', text: '暫時對策' }), cont]),
+      cur ? el('button', { type: 'button', class: 'danger-btn', text: '刪除這筆異常', onclick: async function () {
+        if (!(await confirmSheet('確定刪除「' + Q.title(cur) + '」?傳送到電腦後,電腦上也會刪除。', '刪除'))) return;
+        await changeIssue(cur.id, { deleted: true });
+        ui.draft = null; toast('已刪除,記得「傳送到電腦」'); go('list');
+      } }) : null
+    ]);
+    appEl.appendChild(form);
+
+    saveBtn.addEventListener('click', async function () {
+      if (!String(d.supplier || '').trim() && !String(d.defect || '').trim()) { toast('至少填供應商或不良描述'); return; }
+      var oerr = Q.validateOrigin(d.origin, d.origin_other, !cur);
+      if (oerr) { originErr.textContent = oerr; (d.origin === Q.ORIGIN_OTHER ? otherInput : originSel).focus(); toast(oerr); return; }
+      var fields = {};
+      ['supplier', 'item', 'part_no', 'defect', 'defect_qty', 'total_qty', 'scar', 'due', 'status', 'containment', 'origin', 'origin_other'].forEach(function (f) {
+        fields[f] = typeof d[f] === 'string' ? d[f].trim() : d[f];
+      });
+      if (fields.origin !== Q.ORIGIN_OTHER) fields.origin_other = '';
+      saveBtn.disabled = true;
+      var id;
+      if (cur) { await changeIssue(cur.id, fields); id = cur.id; }
+      else { var it = Q.newIssue(fields); await putIssue(it); id = it.id; }
+      ui.draft = null;
+      toast('已儲存在手機。記得「傳送到電腦」。');
+      go('detail', id);
+    });
+  }
+
+  // 回到這個頁面時(例如隔了幾小時)重新判斷提醒;正在填表單時不打斷
+  ['online', 'offline'].forEach(function (ev) { window.addEventListener(ev, function () { if (ui.view === 'list') render(); }); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && ui.view === 'list') render();
+  });
+
+  // ---------- 啟動 ----------
+  render();
+  Promise.all([store.get('base'), store.get('pending'), store.get('photos'), store.get('meta')]).then(function (r) {
+    if (r[0] && r[0].state) base = { state: Q.normalizeState(r[0].state), thumbs: r[0].thumbs || {}, tracker: Q.cleanTracker(r[0].tracker), generated_at: r[0].generated_at || '' };
+    if (r[1]) pending = { issues: r[1].issues || {}, logs: r[1].logs || {}, annotations: r[1].annotations || {}, item_photos: r[1].item_photos || {} };
+    if (r[2]) photos = r[2];
+    if (r[3]) meta = Object.assign(meta, r[3]);
+    meta.device = meta.device || deviceName();
+    render();
+  });
+  if (window.claude && window.claude.use) {
+    window.claude.use('downloads').then(function (d) { downloads = d; }, function () { downloads = null; });
+  }
+})();
+</script>
+
+<script>
+// 離線:註冊 service worker;請 iPhone 盡量不要清掉這裡的資料
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('離線功能註冊失敗', e); });
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+</script>
+</body>
+</html>
