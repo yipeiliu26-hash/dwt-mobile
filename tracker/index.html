@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>不良品倉追蹤看板</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<!--
+  不良品倉追蹤看板(本機版)
+  直接用 Chrome 或 Edge 開啟這個檔案即可(file://),不需要安裝或架設伺服器。
+  架構說明見 CLAUDE.md;使用說明見 README.md。
+-->
+<div class="wrap">
+  <header class="top">
+    <h1>不良品倉追蹤看板</h1>
+    <nav class="tabs" aria-label="分頁">
+      <button class="tab-btn" data-tab="items" aria-selected="true">項目明細</button>
+      <button class="tab-btn" data-tab="trend" aria-selected="false">趨勢總覽</button>
+      <button class="tab-btn" data-tab="data" aria-selected="false">資料來源</button>
+      <button class="tab-btn" data-tab="quality" aria-selected="false">品質異常</button>
+    </nav>
+    <button id="export-all" class="btn" type="button">匯出Excel(趨勢+明細)</button>
+  </header>
+
+  <!-- 資料連線狀態列 -->
+  <div class="conn-bar" id="conn-bar">
+    <span class="conn-dot" id="conn-dot"></span>
+    <span class="conn-text" id="conn-text">載入中…</span>
+    <span class="conn-buttons">
+      <button class="btn primary" id="btn-connect" type="button" hidden>連結資料夾</button>
+      <button class="btn primary" id="btn-reconnect" type="button" hidden>重新連結資料夾</button>
+      <button class="btn" id="btn-rescan" type="button" hidden>重新讀取資料夾</button>
+      <button class="btn" id="btn-import" type="button">匯入WMS檔案</button>
+      <input type="file" id="file-import" accept=".xlsx,.xlsm" multiple hidden>
+    </span>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- ===================== 項目明細 ===================== -->
+  <section class="panel-items" id="panel-items">
+    <div class="items-toolbar">
+      <div class="wh-filter">
+        <button data-wh="all" aria-selected="true">全部</button>
+        <button data-wh="大園倉" aria-selected="false">大園倉</button>
+        <button data-wh="新竹倉" aria-selected="false">新竹倉</button>
+      </div>
+      <input type="search" id="item-search" placeholder="搜尋料號、品名、供應商">
+    </div>
+    <div class="table-wrap">
+      <table id="items-table">
+        <thead>
+          <tr>
+            <th>料號</th><th>品名</th><th>倉別</th><th>供應商</th><th>數量</th><th>金額(美金)</th><th>處理狀態</th><th>Owner</th><th>預計完成時間</th><th>照片</th>
+          </tr>
+        </thead>
+        <tbody id="items-tbody">
+          <tr><td colspan="10" class="empty-state">載入中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="footnote">只列出最新一週(<span id="items-week"></span>)還在不良品倉的料號,數量和金額都是這一週的。處理狀態/Owner/預計完成時間可以直接點格子輸入,離開格子就自動儲存;填過的內容會自動延續到下一週,料號從新竹調到大園(或反過來)也會跟著過去,不用重新輸入。<span class="save-hint" id="save-hint"></span></p>
+    <details class="transferred" id="transferred">
+      <summary>已轉出不良品倉 <span id="transferred-count"></span></summary>
+      <p class="footnote">最新一週的 WMS 檔案裡已經沒有的料號(最近 8 週內),只供查詢,不算庫存、不匯出。之前填的內容會保留,料號之後再進倉時會自動帶回。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>料號</th><th>品名</th><th>倉別</th><th>最後出現</th><th>當時數量</th><th>當時金額</th><th>處理狀態</th><th>Owner</th></tr></thead>
+          <tbody id="transferred-tbody"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===================== 趨勢總覽 ===================== -->
+  <section class="panel-trend" id="panel-trend" hidden>
+    <div class="filter-row">
+      <span>趨勢圖區間</span>
+      <input type="date" id="start-input" aria-label="起">
+      <span>至</span>
+      <input type="date" id="end-input" aria-label="迄">
+      <button id="reset-range" type="button">重設區間</button>
+    </div>
+
+    <div class="card-grid">
+      <section class="card" id="card-大園倉">
+        <h2>大園倉</h2>
+        <p class="note">不良品倉存貨金額(美金),每週快照</p>
+        <div class="headline">
+          <span class="value skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span class="delta"></span>
+        </div>
+        <div class="chart-box"><svg></svg></div>
+      </section>
+      <section class="card" id="card-新竹倉">
+        <h2>新竹倉</h2>
+        <p class="note">不良品倉存貨金額(美金),每週快照</p>
+        <div class="headline">
+          <span class="value skeleton">&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span class="delta"></span>
+        </div>
+        <div class="chart-box"><svg></svg></div>
+      </section>
+    </div>
+
+    <p class="footnote" id="trend-footnote">載入中…</p>
+
+    <div class="diff-box" id="range-diff">
+      <h3>本區間項目變動 <span class="diff-scope" id="diff-scope"></span></h3>
+      <div class="chg-summary" id="chg-summary" role="group" aria-label="依變動類型篩選"></div>
+      <div class="diff-grid-wrap chg-wrap">
+        <div class="chg-row diff-head"><span>料號</span><span>倉別</span><span>品名</span><span>變動</span><span class="num">數量（期初→期末）</span><span class="num">金額（期初→期末）</span><span class="num">金額變化</span></div>
+        <div id="chg-list"><div class="diff-empty-row">載入中…</div></div>
+        <div class="chg-row chg-total" id="chg-total"></div>
+      </div>
+      <p class="footnote" id="diff-footnote"></p>
+    </div>
+    <div class="diff-box" id="decline-sources">
+      <h3>金額降低來源（去化明細） <span class="diff-scope" id="decline-scope"></span></h3>
+      <div class="diff-grid-wrap">
+        <div class="decline-row diff-head"><span>料號</span><span>倉別</span><span>品名</span><span class="num">數量（期初→期末）</span><span class="num">金額（期初→期末）</span><span class="num">降低金額</span></div>
+        <div id="decline-list"><div class="diff-empty-row">載入中…</div></div>
+      </div>
+      <p class="footnote" id="decline-footnote"></p>
+    </div>
+  </section>
+
+  <!-- ===================== 資料來源 ===================== -->
+  <section class="panel-data" id="panel-data" hidden>
+    <div class="box">
+      <h3>資料怎麼更新</h3>
+      <p id="howto-folder">按上方「連結資料夾」選一個本機資料夾,之後每週把 WMS 不良品倉匯出檔(.xlsx)丟進這個資料夾(或它的子資料夾),回到這個頁面就會自動讀取新檔案。看板的資料(每週快照、處理狀態/Owner/預計完成時間)會存在同一個資料夾的 <code>tracker-data.json</code>。</p>
+      <pre>不良品倉資料/            ← 連結這個資料夾
+  WMS匯出/
+    record_1019.xlsx      ← 每週 WMS 匯出檔(工作表 Data)
+    record_1026.xlsx
+  tracker-data.json       ← 看板自動建立/更新,請勿手動修改
+  tracker-data.backup.json ← 每次開啟後第一次儲存前的備份</pre>
+      <p id="howto-browser" hidden>這個瀏覽器不支援直接讀取資料夾(請用 Chrome 或 Edge)。目前改用「匯入WMS檔案」手動選檔,資料存在這個瀏覽器裡;建議定期用下方「下載資料備份」保存一份。</p>
+      <p>每份檔案的週次以檔案內「年月日」欄位判斷;同一天有兩份檔案時,以修改時間較新的為準。不是 WMS 匯出格式的 Excel(例如看板自己匯出的檔案)會自動略過。</p>
+    </div>
+
+    <div class="box">
+      <h3>已收錄的週次</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>週次</th><th>大園倉(US$)</th><th>新竹倉(US$)</th><th>項目數</th><th>來源檔案</th><th>匯入時間</th><th>備註</th><th></th></tr></thead>
+          <tbody id="weeks-tbody"><tr><td colspan="8" class="empty-state">載入中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="box">
+      <h3>最近一次讀取的檔案</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>檔案</th><th>狀態</th><th>說明</th></tr></thead>
+          <tbody id="files-tbody"><tr><td colspan="3" class="empty-state">還沒有讀取過資料夾</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="box">
+      <h3>備份與連結</h3>
+      <div class="btn-row">
+        <button class="btn" id="btn-download-backup" type="button">下載資料備份(tracker-data.json)</button>
+        <button class="btn" id="btn-load-backup" type="button">載入資料備份…</button>
+        <input type="file" id="file-backup" accept=".json,application/json" hidden>
+        <button class="btn danger" id="btn-disconnect" type="button" hidden>中斷資料夾連結</button>
+      </div>
+      <p style="margin-top:0.6rem">載入備份會和目前資料合併:同一週取較新匯入的、同一料號的註記取較新修改的,不會整份覆蓋。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 品質異常紀錄 ===================== -->
+  <section class="panel-quality" id="panel-quality" hidden>
+    <div class="conn-bar" id="q-sync"></div>
+    <div class="q-layout">
+      <div class="q-listcol">
+        <div class="q-toolbar">
+          <div class="wh-filter" id="q-filter">
+            <button type="button" data-f="open" aria-selected="true">未結案</button>
+            <button type="button" data-f="overdue" aria-selected="false">逾期</button>
+            <button type="button" data-f="all" aria-selected="false">全部</button>
+          </div>
+          <select id="q-origin-filter" class="q-input q-origin-filter" aria-label="異常來源篩選">
+            <option value="">全部來源</option>
+          </select>
+        </div>
+        <div class="q-toolbar">
+          <input type="search" id="q-search" class="q-input q-search" placeholder="搜尋料號、供應商、品名、來源">
+          <button class="btn primary" id="q-add" type="button">新增異常</button>
+        </div>
+        <div class="q-list" id="q-list"></div>
+      </div>
+      <div class="q-detail" id="q-detail"></div>
+    </div>
+  </section>
+</div>
+
+<script src="vendor/exceljs.min.js"></script>
+<script src="data/seed-data.js"></script>
+<script src="js/core.js"></script>
+<script src="js/excel-io.js"></script>
+<script src="js/store.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+<script src="js/quality-core.js"></script>
+<script src="js/quality-photo.js"></script>
+<script src="js/quality-app.js"></script>
+</body>
+</html>
