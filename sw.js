@@ -7,8 +7,13 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
+// 只處理手機版自己的檔案。同一個網站底下還有電腦版看板(tracker/),不能被這裡攔下來換成手機版。
+const SCOPE_PATH = new URL(self.registration.scope).pathname;
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
-  const key = e.request.mode === 'navigate' ? './' : e.request;
-  e.respondWith(caches.match(key).then((hit) => hit || fetch(e.request)));
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith(SCOPE_PATH)) return;
+  const rel = url.pathname.slice(SCOPE_PATH.length);
+  const isPage = rel === '' || rel === 'index.html';
+  if (!isPage && SHELL.indexOf(rel) === -1) return;
+  e.respondWith(caches.match(isPage ? './' : rel).then((hit) => hit || fetch(e.request)));
 });
